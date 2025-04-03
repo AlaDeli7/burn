@@ -35,22 +35,13 @@ impl ConfigStructAnalyzer {
         }
     }
 
+    // todo Add tests
     fn names(&self) -> Vec<FieldTypeAnalyzer> {
-        let mut names = Vec::new();
-
-        for field in self.fields_required.iter() {
-            names.push(field.clone());
-        }
-
-        for field in self.fields_option.iter() {
-            names.push(field.clone());
-        }
-
-        for (field, _) in self.fields_default.iter() {
-            names.push(field.clone());
-        }
-
-        names
+        self.fields_required.iter()
+            .chain(self.fields_option.iter())
+            .chain(self.fields_default.iter().map(|(field, _)| field))
+            .cloned()
+            .collect()
     }
 
     fn name_types(&self, names: &[FieldTypeAnalyzer]) -> Vec<TokenStream> {
@@ -295,5 +286,102 @@ impl ConfigAnalyzer for ConfigStructAnalyzer {
             impl burn::config::Config for #name {
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proc_macro2::Span;
+
+    #[test]
+    fn test_wrap_impl_block_simple_method() {
+        // Arrange
+        let analyzer = ConfigStructAnalyzer::new(
+            Ident::new("TestConfig", Span::call_site()),
+            vec![],
+            vec![],
+            vec![],
+        );
+
+        let method_tokens = quote! {
+            fn test_method(&self) -> bool {
+                true
+            }
+        };
+
+        // Act
+        let result = analyzer.wrap_impl_block(method_tokens);
+
+        // Assert
+        let expected = quote! {
+            impl TestConfig {
+                fn test_method(&self) -> bool {
+                    true
+                }
+            }
+        };
+
+        assert_eq!(result.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn test_wrap_impl_block_multiple_methods() {
+        // Arrange
+        let analyzer = ConfigStructAnalyzer::new(
+            Ident::new("ExampleConfig", Span::call_site()),
+            vec![],
+            vec![],
+            vec![],
+        );
+
+        let methods_tokens = quote! {
+            fn method_one(&self) -> i32 { 42 }
+
+            fn method_two(&mut self, value: String) {
+                // Some implementation
+            }
+        };
+
+        // Act
+        let result = analyzer.wrap_impl_block(methods_tokens);
+
+        // Assert
+        let expected = quote! {
+            impl ExampleConfig {
+                fn method_one(&self) -> i32 { 42 }
+
+                fn method_two(&mut self, value: String) {
+                    // Some implementation
+                }
+            }
+        };
+
+        assert_eq!(result.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn test_wrap_impl_block_empty_content() {
+        // Arrange
+        let analyzer = ConfigStructAnalyzer::new(
+            Ident::new("EmptyConfig", Span::call_site()),
+            vec![],
+            vec![],
+            vec![],
+        );
+
+        let empty_tokens = quote! {};
+
+        // Act
+        let result = analyzer.wrap_impl_block(empty_tokens);
+
+        // Assert
+        let expected = quote! {
+            impl EmptyConfig {
+
+            }
+        };
+
+        assert_eq!(result.to_string(), expected.to_string());
     }
 }

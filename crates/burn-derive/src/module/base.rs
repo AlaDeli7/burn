@@ -6,12 +6,10 @@ use super::{
 use proc_macro::TokenStream;
 
 pub(crate) fn derive_impl(ast: &syn::DeriveInput) -> TokenStream {
-    let has_backend = ast
-        .generics
+    // todo Add tests
+    let has_backend = ast.generics
         .type_params()
-        .map(|param| param.ident == "B")
-        .reduce(|accum, is_backend| is_backend || accum)
-        .unwrap_or(false);
+        .any(|param| param.ident == "B");
 
     match &ast.data {
         syn::Data::Struct(_) => {
