@@ -35,7 +35,6 @@ impl ConfigStructAnalyzer {
         }
     }
 
-    // todo Add tests
     fn names(&self) -> Vec<FieldTypeAnalyzer> {
         self.fields_required.iter()
             .chain(self.fields_option.iter())
@@ -45,18 +44,16 @@ impl ConfigStructAnalyzer {
     }
 
     fn name_types(&self, names: &[FieldTypeAnalyzer]) -> Vec<TokenStream> {
-        let mut name_types = Vec::new();
-
-        for field in names.iter() {
-            let name = field.ident();
-            let ty = &field.field.ty;
-
-            name_types.push(quote! {
-                #name: #ty
-            });
-        }
-
-        name_types
+        names.iter()
+            .map(|field| {
+                let name = field.ident();
+                let ty = &field.field.ty;
+                
+                quote! {
+                    #name: #ty
+                }
+            })
+            .collect()
     }
 
     fn serde_struct_ident(&self) -> Ident {
@@ -293,6 +290,8 @@ impl ConfigAnalyzer for ConfigStructAnalyzer {
 mod tests {
     use super::*;
     use proc_macro2::Span;
+    use syn::{parse_quote, Attribute, Field};
+    use crate::shared::attribute::AttributeAnalyzer;
 
     #[test]
     fn test_wrap_impl_block_simple_method() {
@@ -383,5 +382,159 @@ mod tests {
         };
 
         assert_eq!(result.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn test_names_with_all_field_types() {
+        // Create field analyzers with dummy fields
+        let required_field: Field = parse_quote!(pub required_field: String);
+        let option_field: Field = parse_quote!(pub option_field: Option<u32>);
+        let default_field: Field = parse_quote!(#[config(default = "default_value")] pub default_field: &'static str);
+        
+        let required_analyzer = FieldTypeAnalyzer::new(required_field);
+        let option_analyzer = FieldTypeAnalyzer::new(option_field);
+        let default_analyzer = FieldTypeAnalyzer::new(default_field);
+        
+        // Create default attribute
+        let default_attr: Attribute = parse_quote!(#[config(default = "default_value")]);
+        let attr_item = AttributeAnalyzer::new(default_attr).item();
+        
+        // Create analyzer with all field types
+        let analyzer = ConfigStructAnalyzer::new(
+            Ident::new("TestConfig", Span::call_site()),
+            vec![required_analyzer.clone()],
+            vec![option_analyzer.clone()],
+            vec![(default_analyzer.clone(), attr_item)],
+        );
+        
+        // Act
+        let names = analyzer.names();
+        
+        // Assert
+        assert_eq!(names.len(), 3);
+        assert_eq!(names[0].ident().to_string(), "required_field");
+        assert_eq!(names[1].ident().to_string(), "option_field");
+        assert_eq!(names[2].ident().to_string(), "default_field");
+    }
+
+    #[test]
+    fn test_names_with_empty_collections() {
+        // Create analyzer with empty collections
+        let analyzer = ConfigStructAnalyzer::new(
+            Ident::new("EmptyConfig", Span::call_site()),
+            vec![],
+            vec![],
+            vec![],
+        );
+        
+        // Act
+        let names = analyzer.names();
+        
+        // Assert
+        assert!(names.is_empty());
+    }
+
+    #[test]
+    fn test_name_types_basic_fields() {
+        // Arrange
+        let analyzer = ConfigStructAnalyzer::new(
+            Ident::new("TestConfig", Span::call_site()),
+            vec![],
+            vec![],
+            vec![],
+        );
+        
+        // Create test fields with different types
+        let string_field: Field = parse_quote!(pub name: String);
+        let int_field: Field = parse_quote!(pub count: i32);
+        
+        let fields = vec![
+            FieldTypeAnalyzer::new(string_field),
+            FieldTypeAnalyzer::new(int_field),
+        ];
+        
+        // Act
+        let result = analyzer.name_types(&fields);
+        
+        // Assert
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].to_string(), "name : String");
+        assert_eq!(result[1].to_string(), "count : i32");
+    }
+
+    #[test]
+    fn test_name_types_complex_types() {
+        // Arrange
+        let analyzer = ConfigStructAnalyzer::new(
+            Ident::new("ComplexConfig", Span::call_site()),
+            vec![],
+            vec![],
+            vec![],
+        );
+        
+        // Create test fields with more complex types
+        let option_field: Field = parse_quote!(pub maybe_value: Option<String>);
+        let vec_field: Field = parse_quote!(pub items: Vec<i32>);
+        let generic_field: Field = parse_quote!(pub data: HashMap<String, Vec<f64>>);
+        
+        let fields = vec![
+            FieldTypeAnalyzer::new(option_field),
+            FieldTypeAnalyzer::new(vec_field),
+            FieldTypeAnalyzer::new(generic_field),
+        ];
+        
+        // Act
+        let result = analyzer.name_types(&fields);
+        
+        // Assert
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].to_string(), "maybe_value : Option < String >");
+        assert_eq!(result[1].to_string(), "items : Vec < i32 >");
+        assert_eq!(result[2].to_string(), "data : HashMap < String , Vec < f64 > >");
+    }
+
+    #[test]
+    fn test_name_types_with_empty_input() {
+        // Arrange
+        let analyzer = ConfigStructAnalyzer::new(
+            Ident::new("EmptyConfig", Span::call_site()),
+            vec![],
+            vec![],
+            vec![],
+        );
+        
+        // Act
+        let result = analyzer.name_types(&[]);
+        
+        // Assert
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_name_types_lifetimes_and_references() {
+        // Arrange
+        let analyzer = ConfigStructAnalyzer::new(
+            Ident::new("RefConfig", Span::call_site()),
+            vec![],
+            vec![],
+            vec![],
+        );
+        
+        // Create test fields with lifetimes and references
+        let ref_field: Field = parse_quote!(pub reference: &'static str);
+        let ref_mut_field: Field = parse_quote!(pub mut_ref: &'a mut Vec<u8>);
+        
+        let fields = vec![
+            FieldTypeAnalyzer::new(ref_field),
+            FieldTypeAnalyzer::new(ref_mut_field),
+        ];
+        
+        // Act
+        let result = analyzer.name_types(&fields);
+        
+        // Assert
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].to_string(), "reference : & 'static str");
+        assert_eq!(result[1].to_string(), "mut_ref : & 'a mut Vec < u8 >");
     }
 }
