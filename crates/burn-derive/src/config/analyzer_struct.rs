@@ -719,4 +719,153 @@ mod tests {
 
         assert_eq!(result.to_string(), expected.to_string());
     }
+
+    #[test]
+    fn test_gen_deserialize_fn_basic() {
+        // Arrange
+        let analyzer = ConfigStructAnalyzer::new(
+            Ident::new("SimpleConfig", Span::call_site()),
+            vec![],
+            vec![],
+            vec![],
+        );
+
+        // Create a simple field for testing
+        let field: Field = parse_quote!(pub value: i32);
+        let field_analyzer = FieldTypeAnalyzer::new(field);
+
+        // Create the struct definition
+        let struct_name = analyzer.serde_struct_ident();
+        let struct_gen = quote! {
+            struct SimpleConfigSerde {
+                value: i32
+            }
+        };
+
+        // Act
+        let result = analyzer.gen_deserialize_fn(&struct_name, &struct_gen, &[field_analyzer]);
+
+        // Assert
+        let expected = quote! {
+            impl<'de> burn::serde::Deserialize<'de> for SimpleConfig {
+                fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+                where
+                    D: burn::serde::Deserializer<'de> {
+                    #[derive(burn::serde::Deserialize)]
+                    #[serde(crate = "burn::serde")]
+                    struct SimpleConfigSerde {
+                        value: i32
+                    }
+
+                    let serde_state = SimpleConfigSerde::deserialize(deserializer)?;
+                    Ok(SimpleConfig {
+                        value: serde_state.value
+                    })
+                }
+            }
+        };
+
+        assert_eq!(result.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn test_gen_deserialize_fn_multiple_fields() {
+        // Arrange
+        let analyzer = ConfigStructAnalyzer::new(
+            Ident::new("ModelConfig", Span::call_site()),
+            vec![],
+            vec![],
+            vec![],
+        );
+
+        // Create multiple fields for testing
+        let field1: Field = parse_quote!(pub learning_rate: f32);
+        let field2: Field = parse_quote!(pub batch_size: usize);
+        let field3: Field = parse_quote!(pub model_name: String);
+
+        let fields = vec![
+            FieldTypeAnalyzer::new(field1),
+            FieldTypeAnalyzer::new(field2),
+            FieldTypeAnalyzer::new(field3),
+        ];
+
+        // Create the struct definition
+        let struct_name = analyzer.serde_struct_ident();
+        let struct_gen = quote! {
+            struct ModelConfigSerde {
+                learning_rate: f32,
+                batch_size: usize,
+                model_name: String
+            }
+        };
+
+        // Act
+        let result = analyzer.gen_deserialize_fn(&struct_name, &struct_gen, &fields);
+
+        // Assert
+        let expected = quote! {
+            impl<'de> burn::serde::Deserialize<'de> for ModelConfig {
+                fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+                where
+                    D: burn::serde::Deserializer<'de> {
+                    #[derive(burn::serde::Deserialize)]
+                    #[serde(crate = "burn::serde")]
+                    struct ModelConfigSerde {
+                        learning_rate: f32,
+                        batch_size: usize,
+                        model_name: String
+                    }
+
+                    let serde_state = ModelConfigSerde::deserialize(deserializer)?;
+                    Ok(ModelConfig {
+                        learning_rate: serde_state.learning_rate,
+                        batch_size: serde_state.batch_size,
+                        model_name: serde_state.model_name
+                    })
+                }
+            }
+        };
+
+        assert_eq!(result.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn test_gen_deserialize_fn_empty_struct() {
+        // Arrange
+        let analyzer = ConfigStructAnalyzer::new(
+            Ident::new("EmptyConfig", Span::call_site()),
+            vec![],
+            vec![],
+            vec![],
+        );
+
+        // Create the struct definition
+        let struct_name = analyzer.serde_struct_ident();
+        let struct_gen = quote! {
+            struct EmptyConfigSerde {}
+        };
+
+        // Act
+        let result = analyzer.gen_deserialize_fn(&struct_name, &struct_gen, &[]);
+
+        // Assert
+        let expected = quote! {
+            impl<'de> burn::serde::Deserialize<'de> for EmptyConfig {
+                fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+                where
+                    D: burn::serde::Deserializer<'de> {
+                    #[derive(burn::serde::Deserialize)]
+                    #[serde(crate = "burn::serde")]
+                    struct EmptyConfigSerde {}
+
+                    let serde_state = EmptyConfigSerde::deserialize(deserializer)?;
+                    Ok(EmptyConfig {
+
+                    })
+                }
+            }
+        };
+
+        assert_eq!(result.to_string(), expected.to_string());
+    }
 }
