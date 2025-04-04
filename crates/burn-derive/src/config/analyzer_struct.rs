@@ -537,4 +537,186 @@ mod tests {
         assert_eq!(result[0].to_string(), "reference : & 'static str");
         assert_eq!(result[1].to_string(), "mut_ref : & 'a mut Vec < u8 >");
     }
+
+    #[test]
+    fn test_serde_struct_ident_basic() {
+        // Arrange
+        let analyzer = ConfigStructAnalyzer::new(
+            Ident::new("TestConfig", Span::call_site()),
+            vec![],
+            vec![],
+            vec![],
+        );
+
+        // Act
+        let result = analyzer.serde_struct_ident();
+
+        // Assert
+        assert_eq!(result.to_string(), "TestConfigSerde")
+    }
+
+    #[test]
+    fn test_gen_serde_struct_empty() {
+        // Arrange
+        let analyzer = ConfigStructAnalyzer::new(
+            Ident::new("EmptyConfig", Span::call_site()),
+            vec![],
+            vec![],
+            vec![],
+        );
+        let names: Vec<TokenStream> = vec![];
+
+        // Act
+        let result = analyzer.gen_serde_struct(&names);
+
+        // Assert
+        let expected = quote! {
+            struct EmptyConfigSerde {
+
+            }
+        };
+
+        assert_eq!(result.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn test_gen_serde_struct_with_fields() {
+        // Arrange
+        let analyzer = ConfigStructAnalyzer::new(
+            Ident::new("ModelConfig", Span::call_site()),
+            vec![],
+            vec![],
+            vec![],
+        );
+
+        // Create field definitions as TokenStreams
+        let fields = vec![
+            quote! { learning_rate: f32 },
+            quote! { batch_size: usize },
+            quote! { model_name: String }
+        ];
+
+        // Act
+        let result = analyzer.gen_serde_struct(&fields);
+
+        // Assert
+        let expected = quote! {
+            struct ModelConfigSerde {
+                learning_rate: f32,
+                batch_size: usize,
+                model_name: String
+            }
+        };
+
+        assert_eq!(result.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn test_gen_serialize_fn_basic() {
+        // Arrange
+        let analyzer = ConfigStructAnalyzer::new(
+            Ident::new("SimpleConfig", Span::call_site()),
+            vec![],
+            vec![],
+            vec![],
+        );
+
+        // Create a simple field for testing
+        let field: Field = parse_quote!(pub value: i32);
+        let field_analyzer = FieldTypeAnalyzer::new(field);
+
+        // Create the struct definition
+        let struct_name = analyzer.serde_struct_ident();
+        let struct_gen = quote! {
+            struct SimpleConfigSerde {
+                value: i32
+            }
+        };
+
+        // Act
+        let result = analyzer.gen_serialize_fn(&struct_name, &struct_gen, &[field_analyzer]);
+
+        // Assert
+        let expected = quote! {
+            impl burn::serde::Serialize for SimpleConfig {
+                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+                where
+                    S: burn::serde::Serializer {
+                    #[derive(burn::serde::Serialize)]
+                    #[serde(crate = "burn::serde")]
+                    struct SimpleConfigSerde {
+                        value: i32
+                    }
+
+                    let serde_state = SimpleConfigSerde {
+                        value: self.value.clone()
+                    };
+                    serde_state.serialize(serializer)
+                }
+            }
+        };
+
+        assert_eq!(result.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn test_gen_serialize_fn_multiple_fields() {
+        // Arrange
+        let analyzer = ConfigStructAnalyzer::new(
+            Ident::new("ModelConfig", Span::call_site()),
+            vec![],
+            vec![],
+            vec![],
+        );
+
+        // Create multiple fields for testing
+        let field1: Field = parse_quote!(pub learning_rate: f32);
+        let field2: Field = parse_quote!(pub batch_size: usize);
+        let field3: Field = parse_quote!(pub model_name: String);
+
+        let fields = vec![
+            FieldTypeAnalyzer::new(field1),
+            FieldTypeAnalyzer::new(field2),
+            FieldTypeAnalyzer::new(field3),
+        ];
+
+        // Create the struct definition
+        let struct_name = analyzer.serde_struct_ident();
+        let struct_gen = quote! {
+            struct ModelConfigSerde {
+                learning_rate: f32,
+                batch_size: usize,
+                model_name: String
+            }
+        };
+
+        // Act
+        let result = analyzer.gen_serialize_fn(&struct_name, &struct_gen, &fields);
+
+        // Assert
+        let expected = quote! {
+            impl burn::serde::Serialize for ModelConfig {
+                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+                where
+                    S: burn::serde::Serializer {
+                    #[derive(burn::serde::Serialize)]
+                    #[serde(crate = "burn::serde")]
+                    struct ModelConfigSerde {
+                        learning_rate: f32,
+                        batch_size: usize,
+                        model_name: String
+                    }
+
+                    let serde_state = ModelConfigSerde {
+                        learning_rate: self.learning_rate.clone(),
+                        batch_size: self.batch_size.clone(),
+                        model_name: self.model_name.clone()
+                    };
+                    serde_state.serialize(serializer)
+                }
+            }
+        };
+
+        assert_eq!(result.to_string(), expected.to_string());
+    }
 }
