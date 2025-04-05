@@ -1227,4 +1227,81 @@ mod tests {
 
         assert_eq!(result.to_string(), expected.to_string());
     }
+
+    #[test]
+    fn test_gen_serde_impl_basic_struct() {
+        use proc_macro2::Span;
+        use syn::parse_quote;
+        use quote::quote;
+
+        // Arrange
+        let struct_name = Ident::new("ModelConfig", Span::call_site());
+
+        // Create fields for a simple ML config
+        let field1: Field = parse_quote!(pub learning_rate: f32);
+        let field2: Field = parse_quote!(pub batch_size: usize);
+        let field3: Field = parse_quote!(pub model_name: String);
+
+        // Create the analyzer with these fields as required
+        let analyzer = ConfigStructAnalyzer::new(
+            struct_name,
+            vec![
+                FieldTypeAnalyzer::new(field1),
+                FieldTypeAnalyzer::new(field2),
+                FieldTypeAnalyzer::new(field3),
+            ],
+            vec![],
+            vec![],
+        );
+
+        // Act
+        let result = analyzer.gen_serde_impl();
+
+        // Assert
+        let expected = quote! {
+            impl burn::serde::Serialize for ModelConfig {
+                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+                where
+                    S: burn::serde::Serializer {
+                    #[derive(burn::serde::Serialize)]
+                    #[serde(crate = "burn::serde")]
+                    struct ModelConfigSerde {
+                        learning_rate: f32,
+                        batch_size: usize,
+                        model_name: String
+                    }
+
+                    let serde_state = ModelConfigSerde {
+                        learning_rate: self.learning_rate.clone(),
+                        batch_size: self.batch_size.clone(),
+                        model_name: self.model_name.clone()
+                    };
+                    serde_state.serialize(serializer)
+                }
+            }
+
+            impl<'de> burn::serde::Deserialize<'de> for ModelConfig {
+                fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+                where
+                    D: burn::serde::Deserializer<'de> {
+                    #[derive(burn::serde::Deserialize)]
+                    #[serde(crate = "burn::serde")]
+                    struct ModelConfigSerde {
+                        learning_rate: f32,
+                        batch_size: usize,
+                        model_name: String
+                    }
+
+                    let serde_state = ModelConfigSerde::deserialize(deserializer)?;
+                    Ok(ModelConfig {
+                        learning_rate: serde_state.learning_rate,
+                        batch_size: serde_state.batch_size,
+                        model_name: serde_state.model_name
+                    })
+                }
+            }
+        };
+
+        assert_eq!(result.to_string(), expected.to_string());
+    }
 }
