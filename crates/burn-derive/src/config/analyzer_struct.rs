@@ -167,52 +167,55 @@ impl ConfigAnalyzer for ConfigStructAnalyzer {
         });
 
         let body = quote! {
-        /// Create a new instance of the config.
-        pub fn new(
-            #(#param_declarations),*
-        ) -> Self {
-            Self { #(#field_initializers)* }
-        }
-    };
+            /// Create a new instance of the config.
+            pub fn new(
+                #(#param_declarations),*
+            ) -> Self {
+                Self { #(#field_initializers)* }
+            }
+        };
 
         self.wrap_impl_block(body)
     }
 
     fn gen_builder_fns(&self) -> TokenStream {
-        let mut body = quote! {};
-
-        for (field, _) in self.fields_default.iter() {
+        let default_field_builders = self.fields_default.iter().map(|(field, _)| {
             let name = field.ident();
             let doc = field.doc().unwrap_or_else(|| {
                 quote! {
-                        /// Set the default value for the field.
+                    /// Set the default value for the field.
                 }
             });
             let ty = &field.field.ty;
             let fn_name = Ident::new(&format!("with_{name}"), name.span());
 
-            body.extend(quote! {
+            quote! {
                 #doc
                 pub fn #fn_name(mut self, #name: #ty) -> Self {
                     self.#name = #name;
                     self
                 }
-            });
-        }
+            }
+        });
 
-        for field in self.fields_option.iter() {
+        let option_field_builders = self.fields_option.iter().map(|field| {
             let name = field.ident();
             let ty = &field.field.ty;
             let fn_name = Ident::new(&format!("with_{name}"), name.span());
 
-            body.extend(quote! {
-                /// Set the default value for the field.
-                pub fn #fn_name(mut self, #name: #ty) -> Self {
-                    self.#name = #name;
-                    self
-                }
-            });
+            quote! {
+            /// Set the default value for the field.
+            pub fn #fn_name(mut self, #name: #ty) -> Self {
+                self.#name = #name;
+                self
+            }
         }
+        });
+
+        let body = quote! {
+            #(#default_field_builders)*
+            #(#option_field_builders)*
+        };
 
         self.wrap_impl_block(body)
     }
@@ -1064,6 +1067,161 @@ mod tests {
                     Self {
                     }
                 }
+            }
+        };
+
+        assert_eq!(result.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn test_gen_builder_fns_for_default_fields() {
+        // Arrange
+        let name = Ident::new("ConfigWithDefaults", Span::call_site());
+
+        // Create field with default value
+        let field: Field = parse_quote!(pub learning_rate: f32);
+        let attr: Attribute = parse_quote!(#[config(default = 0.01)]);
+        let default_field = (FieldTypeAnalyzer::new(field), AttributeAnalyzer::new(attr).item());
+
+        let analyzer = ConfigStructAnalyzer::new(
+            name,
+            vec![],
+            vec![],
+            vec![default_field],
+        );
+
+        // Act
+        let result = analyzer.gen_builder_fns();
+
+        // Assert
+        let expected = quote! {
+            impl ConfigWithDefaults {
+                /// Set the default value for the field.
+                pub fn with_learning_rate(mut self, learning_rate: f32) -> Self {
+                    self.learning_rate = learning_rate;
+                    self
+                }
+            }
+        };
+
+        assert_eq!(result.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn test_gen_builder_fns_for_optional_fields() {
+        // Arrange
+        let name = Ident::new("ConfigWithOptions", Span::call_site());
+
+        // Create optional field
+        let field: Field = parse_quote!(pub dropout: Option<f32>);
+
+        let analyzer = ConfigStructAnalyzer::new(
+            name,
+            vec![],
+            vec![FieldTypeAnalyzer::new(field)],
+            vec![],
+        );
+
+        // Act
+        let result = analyzer.gen_builder_fns();
+
+        // Assert
+        let expected = quote! {
+            impl ConfigWithOptions {
+                /// Set the default value for the field.
+                pub fn with_dropout(mut self, dropout: Option<f32>) -> Self {
+                    self.dropout = dropout;
+                    self
+                }
+            }
+        };
+
+        assert_eq!(result.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn test_gen_builder_fns_with_multiple_fields() {
+        // Arrange
+        let name = Ident::new("ModelConfig", Span::call_site());
+
+        // Create default field
+        let default_field: Field = parse_quote!(pub learning_rate: f32);
+        let default_attr: Attribute = parse_quote!(#[config(default = 0.01)]);
+        let default = (FieldTypeAnalyzer::new(default_field), AttributeAnalyzer::new(default_attr).item());
+
+        // Create optional fields
+        let option_field1: Field = parse_quote!(pub dropout: Option<f32>);
+        let option_field2: Field = parse_quote!(pub batch_size: Option<usize>);
+
+        let analyzer = ConfigStructAnalyzer::new(
+            name,
+            vec![],
+            vec![
+                FieldTypeAnalyzer::new(option_field1),
+                FieldTypeAnalyzer::new(option_field2),
+            ],
+            vec![default],
+        );
+
+        // Act
+        let result = analyzer.gen_builder_fns();
+
+        // Assert - we'll use a simplified assertion to check for all expected builder methods
+        let result_str = result.to_string();
+
+        assert!(result_str.contains("with_learning_rate"));
+        assert!(result_str.contains("with_dropout"));
+        assert!(result_str.contains("with_batch_size"));
+    }
+
+    #[test]
+    fn test_gen_builder_fns_with_doc_comments() {
+        // Arrange
+        let name = Ident::new("DocConfig", Span::call_site());
+
+        // Create field with doc comment
+        let mut field: Field = parse_quote!(pub epochs: usize);
+        field.attrs.push(parse_quote!(#[doc = "Number of training epochs"]));
+
+        let attr: Attribute = parse_quote!(#[config(default = 10)]);
+        let default_field = (FieldTypeAnalyzer::new(field), AttributeAnalyzer::new(attr).item());
+
+        let analyzer = ConfigStructAnalyzer::new(
+            name,
+            vec![],
+            vec![],
+            vec![default_field],
+        );
+
+        // Act
+        let result = analyzer.gen_builder_fns();
+
+        // Assert
+        let result_str = result.to_string();
+
+        // Check that the doc comment was preserved
+        assert!(result_str.contains("Number of training epochs"));
+        assert!(result_str.contains("with_epochs"));
+    }
+
+    #[test]
+    fn test_gen_builder_fns_empty() {
+        // Arrange
+        let name = Ident::new("EmptyConfig", Span::call_site());
+
+        let analyzer = ConfigStructAnalyzer::new(
+            name,
+            vec![],
+            vec![],
+            vec![],
+        );
+
+        // Act
+        let result = analyzer.gen_builder_fns();
+
+        // Assert
+        let expected = quote! {
+            impl EmptyConfig {
             }
         };
 
