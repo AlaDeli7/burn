@@ -1304,4 +1304,49 @@ mod tests {
 
         assert_eq!(result.to_string(), expected.to_string());
     }
+
+    #[test]
+    fn test_gen_clone_impl() {
+        use proc_macro2::Span;
+        use syn::parse_quote;
+        use quote::quote;
+
+        // Arrange
+        let struct_name = Ident::new("DataConfig", Span::call_site());
+
+        // Create various field types
+        let field1: Field = parse_quote!(pub dataset_path: String);
+        let field2: Field = parse_quote!(pub batch_size: usize);
+        let field3: Field = parse_quote!(pub shuffle: bool);
+
+        // Create the analyzer with these fields
+        let analyzer = ConfigStructAnalyzer::new(
+            struct_name,
+            vec![
+                FieldTypeAnalyzer::new(field1),
+                FieldTypeAnalyzer::new(field2),
+                FieldTypeAnalyzer::new(field3),
+            ],
+            vec![],
+            vec![],
+        );
+
+        // Act
+        let result = analyzer.gen_clone_impl();
+
+        // Assert
+        let expected = quote! {
+            impl Clone for DataConfig {
+                fn clone(&self) -> Self {
+                    Self {
+                        dataset_path: self.dataset_path.clone(),
+                        batch_size: self.batch_size.clone(),
+                        shuffle: self.shuffle.clone()
+                    }
+                }
+            }
+        };
+
+        assert_eq!(result.to_string(), expected.to_string());
+    }
 }
