@@ -210,4 +210,47 @@ mod tests {
 
         assert_eq!(result.to_string(), expected.to_string());
     }
+
+    #[test]
+    fn test_gen_serialize_fn() {
+        // Arrange - Create an enum with different variant types
+        let input: DeriveInput = parse_quote! {
+            enum Shape {
+                Circle(f32),
+                Rectangle { width: f32, height: f32 },
+                Point
+            }
+        };
+
+        // Arrange - Extract the enum data
+        let enum_data = match &input.data {
+            Data::Enum(data) => data.clone(),
+            _ => panic!("Expected enum data"),
+        };
+
+        // Arrange - Create the analyzer
+        let analyzer = ConfigEnumAnalyzer::new(input.ident.clone(), enum_data);
+
+        // Act - Generate the serialization implementation
+        let serialize_impl = analyzer.gen_serialize_fn();
+
+        // Arrange - Define expected implementation
+        let expected = quote! {
+            impl burn::serde::Serialize for Shape {
+                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+                where
+                    S: burn::serde::Serializer {
+                    let serde_state = match self {
+                        Self::Circle(arg_0) => ShapeSerde::Circle(arg_0.clone()),
+                        Self::Rectangle { width, height } => ShapeSerde::Rectangle { width: width.clone(), height: height.clone() },
+                        Self::Point => ShapeSerde::Point
+                    };
+                    serde_state.serialize(serializer)
+                }
+            }
+        };
+
+        // Assert - Verify generated code matches expected
+        assert_eq!(serialize_impl.to_string(), expected.to_string());
+    }
 }
