@@ -78,3 +78,83 @@ pub(crate) fn parse_variants(ast: &syn::DeriveInput) -> Vec<EnumVariant> {
 
     variants
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proc_macro2::{Ident, TokenStream};
+    use quote::quote;
+    use syn::parse_quote;
+
+    #[test]
+    fn test_map_enum_variant_with_unnamed_fields() {
+        // Variant from Option enum: Some(T)
+        // Arrange
+        let variant: syn::Variant = parse_quote! {
+            Some(String)
+        };
+
+        // Simple mapper that wraps each field in a cloning operation
+        let mapper = |ident: &Ident| -> TokenStream {
+            quote! { #ident.clone() }
+        };
+
+        // Act
+        let (inputs, outputs) = map_enum_variant(&variant, mapper);
+
+        // Assert
+        let expected_inputs = quote! { (arg_0) };
+        let expected_outputs = quote! { (arg_0.clone()) };
+
+        assert_eq!(inputs.to_string(), expected_inputs.to_string());
+        assert_eq!(outputs.to_string(), expected_outputs.to_string());
+    }
+
+    #[test]
+    fn test_map_enum_variant_with_named_fields() {
+        // Variant from Shape enum: Rectangle { width: f32, height: f32 }
+        // Arrange
+        let variant: syn::Variant = parse_quote! {
+            Rectangle { width: f32, height: f32 }
+        };
+
+        // Mapper that applies validation to dimensions
+        let mapper = |ident: &Ident| -> TokenStream {
+            quote! { validate_dimension(#ident) }
+        };
+
+        // Act
+        let (inputs, outputs) = map_enum_variant(&variant, mapper);
+
+        // Assert
+        let expected_inputs = quote! { { width, height } };
+        let expected_outputs = quote! { { width: validate_dimension(width), height: validate_dimension(height) } };
+
+        assert_eq!(inputs.to_string(), expected_inputs.to_string());
+        assert_eq!(outputs.to_string(), expected_outputs.to_string());
+    }
+
+    #[test]
+    fn test_map_enum_variant_with_unit_variant() {
+        // Variant from Option enum: None
+        // Arrange
+        let variant: syn::Variant = parse_quote! {
+            None
+        };
+
+        // Mapper is not used for unit variants but still required
+        let mapper = |ident: &Ident| -> TokenStream {
+            quote! { #ident }
+        };
+
+        // Act
+        let (inputs, outputs) = map_enum_variant(&variant, mapper);
+
+        // Assert
+        let expected_inputs = quote! {};
+        let expected_outputs = quote! {};
+
+        assert_eq!(inputs.to_string(), expected_inputs.to_string());
+        assert_eq!(outputs.to_string(), expected_outputs.to_string());
+    }
+}

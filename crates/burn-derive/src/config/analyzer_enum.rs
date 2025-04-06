@@ -139,3 +139,75 @@ impl ConfigAnalyzer for ConfigEnumAnalyzer {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use syn::{parse_quote, DeriveInput, Data};
+
+    #[test]
+    fn test_serde_enum_ident() {
+        // Create a DeriveInput for an enum using parse_quote
+        let input: DeriveInput = parse_quote! {
+            enum DeviceType {
+                CPU,
+                GPU,
+                TPU
+            }
+        };
+
+        // Extract the DataEnum from DeriveInput
+        let enum_data = match &input.data {
+            Data::Enum(data) => data.clone(),
+            _ => panic!("Expected enum data"),
+        };
+
+        // Create the analyzer
+        let enum_name = input.ident.clone();
+        let analyzer = ConfigEnumAnalyzer::new(enum_name, enum_data);
+
+        // Act - Get the generated serde enum identifier
+        let result = analyzer.serde_enum_ident();
+
+        // Assert - Verify the name is correctly formed and preserves span
+        assert_eq!(result.to_string(), "DeviceTypeSerde");
+    }
+
+    #[test]
+    fn test_gen_serde_enum() {
+        // Create a DeriveInput for an enum with different variant types
+        let input: DeriveInput = parse_quote! {
+            enum DeviceType {
+                CPU,
+                GPU(String),
+                TPU { cores: u32, vendor: String }
+            }
+        };
+
+        // Extract the DataEnum from DeriveInput
+        let enum_data = match &input.data {
+            Data::Enum(data) => data.clone(),
+            _ => panic!("Expected enum data"),
+        };
+
+        // Create the analyzer with the enum name and data
+        let enum_name = input.ident.clone();
+        let analyzer = ConfigEnumAnalyzer::new(enum_name, enum_data);
+
+        // Act - Generate the serde enum
+        let result = analyzer.gen_serde_enum();
+
+        // Assert - Verify the generated code structure
+        let expected = quote! {
+            #[derive(burn::serde::Serialize, burn::serde::Deserialize)]
+            #[serde(crate = "burn::serde")]
+            enum DeviceTypeSerde {
+                CPU,
+                GPU(String),
+                TPU { cores: u32, vendor: String }
+            }
+        };
+
+        assert_eq!(result.to_string(), expected.to_string());
+    }
+}
