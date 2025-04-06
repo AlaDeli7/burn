@@ -253,4 +253,147 @@ mod tests {
         // Assert - Verify generated code matches expected
         assert_eq!(serialize_impl.to_string(), expected.to_string());
     }
+
+    #[test]
+    fn test_gen_deserialize_fn() {
+        // Arrange - Create an enum with different variant types
+        let input: DeriveInput = parse_quote! {
+            enum Shape {
+                Circle(f32),
+                Rectangle { width: f32, height: f32 },
+                Point
+            }
+        };
+
+        // Arrange - Extract the enum data
+        let Data::Enum(enum_data) = input.data.clone() else {
+            panic!("Expected enum data")
+        };
+
+        // Arrange - Create the analyzer
+        let analyzer = ConfigEnumAnalyzer::new(input.ident.clone(), enum_data);
+
+        // Act - Generate the deserialization implementation
+        let deserialize_impl = analyzer.gen_deserialize_fn();
+
+        // Arrange - Define expected implementation
+        let expected = quote! {
+            impl<'de> burn::serde::Deserialize<'de> for Shape {
+                fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+                where
+                    D: burn::serde::Deserializer<'de> {
+                    let serde_state = ShapeSerde::deserialize(deserializer)?;
+                    Ok(match serde_state {
+                        ShapeSerde::Circle(arg_0) => Self::Circle(arg_0.clone()),
+                        ShapeSerde::Rectangle { width, height } => Self::Rectangle { width: width.clone(), height: height.clone() },
+                        ShapeSerde::Point => Self::Point
+                    })
+                }
+            }
+        };
+
+        // Assert - Verify generated code matches expected
+        assert_eq!(deserialize_impl.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn test_gen_serde_impl() {
+        // Arrange - Create an enum with different variant types
+        let input: DeriveInput = parse_quote! {
+            enum Device {
+                CPU,
+                GPU(String)
+            }
+        };
+
+        // Arrange - Extract the enum data
+        let Data::Enum(enum_data) = input.data.clone() else {
+            panic!("Expected enum data")
+        };
+
+        // Arrange - Create the analyzer
+        let analyzer = ConfigEnumAnalyzer::new(input.ident.clone(), enum_data);
+
+        // Act - Generate the combined serde implementation
+        let actual = analyzer.gen_serde_impl();
+
+        // Arrange - Define expected implementation
+        let expected = quote! {
+            #[derive(burn::serde::Serialize, burn::serde::Deserialize)]
+            #[serde(crate = "burn::serde")]
+            enum DeviceSerde {
+                CPU,
+                GPU(String)
+            }
+
+            impl burn::serde::Serialize for Device {
+                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+                where
+                    S: burn::serde::Serializer {
+                    let serde_state = match self {
+                        Self::CPU => DeviceSerde::CPU,
+                        Self::GPU(arg_0) => DeviceSerde::GPU(arg_0.clone())
+                    };
+                    serde_state.serialize(serializer)
+                }
+            }
+
+            impl<'de> burn::serde::Deserialize<'de> for Device {
+                fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+                where
+                    D: burn::serde::Deserializer<'de> {
+                    let serde_state = DeviceSerde::deserialize(deserializer)?;
+                    Ok(match serde_state {
+                        DeviceSerde::CPU => Self::CPU,
+                        DeviceSerde::GPU(arg_0) => Self::GPU(arg_0.clone())
+                    })
+                }
+            }
+        };
+
+        // Assert - Verify generated code matches expected
+        assert_eq!(actual.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn test_gen_clone_impl() {
+        // Arrange - Create an enum with different variant types
+        let input: DeriveInput = parse_quote! {
+        enum Message {
+            Text(String),
+            Command { name: String, args: Vec<String> },
+            Quit
+        }
+    };
+
+        // Arrange - Extract the enum data
+        let Data::Enum(enum_data) = input.data.clone() else {
+            panic!("Expected enum data")
+        };
+
+        // Arrange - Create the analyzer
+        let analyzer = ConfigEnumAnalyzer::new(input.ident.clone(), enum_data);
+
+        // Act - Generate the Clone implementation
+        let actual = analyzer.gen_clone_impl();
+
+        // Arrange - Define expected implementation
+        let expected = quote! {
+            impl Clone for Message {
+                fn clone(&self) -> Self {
+                    match self {
+                        Self::Text(arg_0) => Self::Text(arg_0.clone()),
+                        Self::Command { name, args } => Self::Command { name: name.clone(), args: args.clone() },
+                        Self::Quit => Self::Quit
+                    }
+                }
+            }
+        };
+
+        // Assert - Verify generated code matches expected
+        assert_eq!(
+            actual.to_string(),
+            expected.to_string()
+        );
+    }
 }
