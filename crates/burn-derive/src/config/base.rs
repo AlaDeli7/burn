@@ -6,6 +6,7 @@ pub(crate) fn derive_impl(item: &syn::DeriveInput) -> proc_macro::TokenStream {
     proc_macro::TokenStream::from(input)
 }
 
+// Goal : Avoid direct use of proc_macro APIs in the testable logic
 fn derive_impl_code(item: &syn::DeriveInput) -> proc_macro2::TokenStream {
     let factory = ConfigAnalyzerFactory::new();
     let analyzer = factory.create_analyzer(item);
