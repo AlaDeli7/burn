@@ -38,7 +38,6 @@ mod tests {
     fn test_derive_impl_for_struct() {
         // Arrange - Create a struct
         let struct_input = parse_quote! {
-            // #[derive(Config)]
             pub struct NetworkConfig {
                 #[config(default = "0.001")]
                 pub learning_rate: f32,
