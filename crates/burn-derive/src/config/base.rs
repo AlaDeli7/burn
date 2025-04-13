@@ -143,4 +143,83 @@ mod tests {
         // Assert - Compare the string representations
         assert_eq!(actual.to_string(), expected.to_string());
     }
+
+    #[test]
+    fn test_derive_impl_for_enum() {
+        // Arrange
+        let enum_input = parse_quote! {
+            pub enum ActivationConfig {
+                ReLU,
+                Sigmoid,
+                LeakyReLU { alpha: f32 },
+            }
+        };
+
+        // Arrange - Create expected output
+        let expected = quote! {
+            impl burn::config::Config for ActivationConfig { }
+
+            #[derive(burn::serde::Serialize, burn::serde::Deserialize)]
+            #[serde(crate = "burn::serde")]
+            enum ActivationConfigSerde {
+                ReLU,
+                Sigmoid,
+                LeakyReLU { alpha: f32 },
+            }
+
+            impl burn::serde::Serialize for ActivationConfig {
+                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+                where
+                    S: burn::serde::Serializer {
+                    let serde_state = match self {
+                        Self::ReLU => ActivationConfigSerde::ReLU,
+                        Self::Sigmoid => ActivationConfigSerde::Sigmoid,
+                        Self::LeakyReLU { alpha } => ActivationConfigSerde::LeakyReLU {
+                            alpha: alpha.clone()
+                        }
+                    };
+                    serde_state.serialize(serializer)
+                }
+            }
+
+            impl<'de> burn::serde::Deserialize<'de> for ActivationConfig {
+                fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+                where
+                    D: burn::serde::Deserializer<'de> {
+                    let serde_state = ActivationConfigSerde::deserialize(deserializer)?;
+                    Ok(match serde_state {
+                        ActivationConfigSerde::ReLU => Self::ReLU,
+                        ActivationConfigSerde::Sigmoid => Self::Sigmoid,
+                        ActivationConfigSerde::LeakyReLU { alpha } => Self::LeakyReLU {
+                            alpha: alpha.clone()
+                        }
+                    })
+                }
+            }
+
+            impl Clone for ActivationConfig {
+                fn clone(&self) -> Self {
+                    match self {
+                        Self::ReLU => Self::ReLU,
+                        Self::Sigmoid => Self::Sigmoid,
+                        Self::LeakyReLU { alpha } => Self::LeakyReLU {
+                            alpha: alpha.clone()
+                        }
+                    }
+                }
+            }
+
+            impl core::fmt::Display for ActivationConfig {
+                fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    f.write_str(&burn::config::config_to_json(self))
+                }
+            }
+        };
+
+        // Act
+        let actual = derive_impl_code(&enum_input);
+
+        // Assert
+        assert_eq!(actual.to_string(), expected.to_string());
+    }
 }
