@@ -359,12 +359,12 @@ mod tests {
     fn test_gen_clone_impl() {
         // Arrange - Create an enum with different variant types
         let input: DeriveInput = parse_quote! {
-        enum Message {
-            Text(String),
-            Command { name: String, args: Vec<String> },
-            Quit
-        }
-    };
+            enum Message {
+                Text(String),
+                Command { name: String, args: Vec<String> },
+                Quit
+            }
+        };
 
         // Arrange - Extract the enum data
         let Data::Enum(enum_data) = input.data.clone() else {
